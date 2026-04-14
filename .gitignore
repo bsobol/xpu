@@ -1,4 +1,5 @@
 .vscode/
+.idea/
 build/
 docs/html
 compile_commands.json
