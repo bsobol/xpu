@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstddef>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -48,6 +49,8 @@ private:
     };
     using buffer_map = std::unordered_map<const void *, buffer_entry>;
     buffer_map m_entries;
+
+    std::recursive_mutex m_mutex;
 
     static constexpr size_t stack_alignment = 256;
     struct stack_entry {

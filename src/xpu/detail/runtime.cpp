@@ -29,76 +29,77 @@ runtime &runtime::instance() {
 }
 
 void runtime::initialize(const settings &settings) {
-
-    bool verbose = getenv_bool("XPU_VERBOSE", settings.verbose);
-    config::logging = verbose;
-    if (verbose) {
-        logger::instance().initialize(settings.logging_sink);
-    }
-
-    config::profile = getenv_bool("XPU_PROFILE", settings.profile);
-
-    std::vector<driver_t> excluded_backends;
-    std::transform(
-        settings.excluded_backends.begin(),
-        settings.excluded_backends.end(),
-        std::back_inserter(excluded_backends),
-        [](auto backend) { return static_cast<driver_t>(backend); }
-    );
-    std::string excluded_backends_str = getenv_str("XPU_EXCLUDE", "");
-    if (not excluded_backends_str.empty() && not excluded_backends.empty()) {
-        XPU_LOG("settings::excluded_backends set. Ignoring environment variable XPU_EXCLUDE.");
-    } else {
-        XPU_LOG("Parsing environment variable XPU_EXCLUDE: %s.", excluded_backends_str.c_str());
-        excluded_backends = parse_backend_list(excluded_backends_str);
-    }
-
-    backend::load(excluded_backends);
-
-    XPU_LOG("Found devices:");
-    for (driver_t driver : {cpu, cuda, hip, sycl}) {
-        if (not backend::is_available(driver)) {
-            XPU_LOG("  No %s devices found.", driver_to_str(driver));
-            continue;
+    std::call_once(m_init_flag, [this, &settings]() {
+        bool verbose = getenv_bool("XPU_VERBOSE", settings.verbose);
+        config::logging = verbose;
+        if (verbose) {
+            logger::instance().initialize(settings.logging_sink);
         }
-        int ndevices = 0;
-        try {
-            DRIVER_CALL_I(driver, num_devices(&ndevices));
-        } catch (std::exception &e) {
-            XPU_LOG("  Caught error during initialization: %s", e.what());
-            XPU_LOG("  Disabling %s backend.", driver_to_str(driver));
-            backend::unload(driver);
-            continue;
+
+        config::profile = getenv_bool("XPU_PROFILE", settings.profile);
+
+        std::vector<driver_t> excluded_backends;
+        std::transform(
+            settings.excluded_backends.begin(),
+            settings.excluded_backends.end(),
+            std::back_inserter(excluded_backends),
+            [](auto backend) { return static_cast<driver_t>(backend); }
+        );
+        std::string excluded_backends_str = getenv_str("XPU_EXCLUDE", "");
+        if (not excluded_backends_str.empty() && not excluded_backends.empty()) {
+            XPU_LOG("settings::excluded_backends set. Ignoring environment variable XPU_EXCLUDE.");
+        } else {
+            XPU_LOG("Parsing environment variable XPU_EXCLUDE: %s.", excluded_backends_str.c_str());
+            excluded_backends = parse_backend_list(excluded_backends_str);
         }
-        XPU_LOG(" %s (%d)", driver_to_str(driver), ndevices);
-        for (int i = 0; i < ndevices; i++) {
-            device dev;
-            dev.backend = driver;
-            dev.device_nr = i;
-            dev.id = m_devices.size();
-            m_devices.emplace_back(dev);
+
+        backend::load(excluded_backends);
+
+        XPU_LOG("Found devices:");
+        for (driver_t driver : {cpu, cuda, hip, sycl}) {
+            if (not backend::is_available(driver)) {
+                XPU_LOG("  No %s devices found.", driver_to_str(driver));
+                continue;
+            }
+            int ndevices = 0;
+            try {
+                DRIVER_CALL_I(driver, num_devices(&ndevices));
+            } catch (std::exception &e) {
+                XPU_LOG("  Caught error during initialization: %s", e.what());
+                XPU_LOG("  Disabling %s backend.", driver_to_str(driver));
+                backend::unload(driver);
+                continue;
+            }
+            XPU_LOG(" %s (%d)", driver_to_str(driver), ndevices);
+            for (int i = 0; i < ndevices; i++) {
+                device dev;
+                dev.backend = driver;
+                dev.device_nr = i;
+                dev.id = m_devices.size();
+                m_devices.emplace_back(dev);
+            }
         }
-    }
 
-    std::optional<detail::device> target_device;
-    if (auto device_env = getenv_str("XPU_DEVICE", settings.device); true) {
-        target_device = get_device(device_env);
+        std::optional<detail::device> target_device;
+        if (auto device_env = getenv_str("XPU_DEVICE", settings.device); true) {
+            target_device = get_device(device_env);
 
-        if (target_device == std::nullopt) {
-            raise_error(format("Requested unknown driver with environment variable XPU_DEVICE='%s'", device_env.c_str()));
+            if (target_device == std::nullopt) {
+                raise_error(format("Requested unknown driver with environment variable XPU_DEVICE='%s'", device_env.c_str()));
+            }
         }
-    }
 
-    m_active_device = *target_device;
-    xpu::detail::device_prop props;
-    DRIVER_CALL(get_properties(&props, m_active_device.device_nr));
-    DRIVER_CALL(set_device(m_active_device.device_nr));
+        m_active_device = *target_device;
+        xpu::detail::device_prop props;
+        DRIVER_CALL(get_properties(&props, m_active_device.device_nr));
+        DRIVER_CALL(set_device(m_active_device.device_nr));
 
-    if (m_active_device.backend != cpu) {
-        XPU_LOG("Selected %s(arch = %s) as active device. (id = %d)", props.name.c_str(), props.arch.c_str(), m_active_device.id);
-    } else {
-        XPU_LOG("Selected %s as active device.", props.name.c_str());
-    }
+        if (m_active_device.backend != cpu) {
+            XPU_LOG("Selected %s(arch = %s) as active device. (id = %d)", props.name.c_str(), props.arch.c_str(), m_active_device.id);
+        } else {
+            XPU_LOG("Selected %s as active device.", props.name.c_str());
+        }
+    });
 }
 
 void *runtime::malloc_host(size_t bytes) {

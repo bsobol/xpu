@@ -1,6 +1,7 @@
 #ifndef XPU_DETAIL_TYPE_INFO_H
 #define XPU_DETAIL_TYPE_INFO_H
 
+#include <atomic>
 #include <string>
 #include <type_traits>
 
@@ -28,7 +29,7 @@ const char *type_name() noexcept {
 template<typename Group = void>
 struct type_seq {
     static size_t next() {
-        static size_t value = 0;
+        static std::atomic<size_t> value{0};
         return value++;
     }
 };

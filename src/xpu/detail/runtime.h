@@ -8,6 +8,7 @@
 #include "timers.h"
 #include "log.h"
 
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -109,6 +110,7 @@ public:
 
     template<typename I>
     void preload_image() {
+        std::lock_guard lock(m_mutex);
         XPU_LOG("Preloading image '%s'.", type_name<I>());
 
         auto *img = m_images.find< image<I> >(m_active_device.backend);
@@ -125,6 +127,9 @@ private:
 
     detail::device m_active_device;
     std::vector<detail::device> m_devices;
+
+    std::recursive_mutex m_mutex;
+    std::once_flag m_init_flag;
 
     static bool getenv_bool(std::string name, bool fallback);
     static std::string getenv_str(std::string name, std::string_view fallback);

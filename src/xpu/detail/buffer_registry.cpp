@@ -10,6 +10,7 @@ buffer_registry &buffer_registry::instance() {
 }
 
 void *buffer_registry::create(size_t size, buffer_type type, void *host_ptr) {
+    std::lock_guard lock(m_mutex);
     void *ptr = nullptr;
     bool owns_host_ptr = false;
     switch (type) {
@@ -68,6 +69,7 @@ void *buffer_registry::create(size_t size, buffer_type type, void *host_ptr) {
 }
 
 void buffer_registry::add_ref(const void *ptr) {
+    std::lock_guard lock(m_mutex);
     auto it = m_entries.find(ptr);
     if (it == m_entries.end()) {
         return;
@@ -77,6 +79,7 @@ void buffer_registry::add_ref(const void *ptr) {
 }
 
 void buffer_registry::remove_ref(const void *ptr) {
+    std::lock_guard lock(m_mutex);
     auto it = m_entries.find(ptr);
     if (it == m_entries.end()) {
         return;
@@ -90,6 +93,7 @@ void buffer_registry::remove_ref(const void *ptr) {
 }
 
 buffer_data buffer_registry::get(const void *ptr) {
+    std::lock_guard lock(m_mutex);
     auto it = m_entries.find(ptr);
     if (it != m_entries.end()) {
         return it->second.data;
@@ -117,6 +121,7 @@ buffer_data buffer_registry::get(const void *ptr) {
 }
 
 void buffer_registry::stack_alloc(device dev, size_t size) {
+    std::lock_guard lock(m_mutex);
     auto it = m_stacks.find(dev.id);
     if (it != m_stacks.end()) {
         throw std::runtime_error("Stack already allocated");
@@ -131,6 +136,7 @@ void buffer_registry::stack_alloc(device dev, size_t size) {
 }
 
 void *buffer_registry::stack_push(device dev, size_t size) {
+    std::lock_guard lock(m_mutex);
     auto it = m_stacks.find(dev.id);
     if (it == m_stacks.end()) {
         throw std::runtime_error("Stack not allocated");
@@ -150,6 +156,7 @@ void *buffer_registry::stack_push(device dev, size_t size) {
 }
 
 void buffer_registry::stack_pop(device dev, void *ptr) {
+    std::lock_guard lock(m_mutex);
     auto it = m_stacks.find(dev.id);
     if (it == m_stacks.end()) {
         throw std::runtime_error("Stack not allocated");
@@ -173,6 +180,7 @@ void buffer_registry::stack_pop(device dev, void *ptr) {
 }
 
 bool buffer_registry::stack_contains(const void *ptr) {
+    std::lock_guard lock(m_mutex);
     if (ptr == nullptr) {
         return false;
     }
@@ -205,6 +213,7 @@ bool buffer_registry::stack_entry::contains(const void *ptr) const {
 }
 
 void buffer_registry::remove(buffer_map::iterator it) {
+    std::lock_guard lock(m_mutex);
     if (it == m_entries.end()) {
         return;
     }
